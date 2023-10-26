@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %yellow(%date{ISO8601}) | %highlight(%-5level) | %logger{1} | %highlight(%msg%n%ex{full})
+            </pattern>
+        </encoder>
+    </appender>
+
+    <logger name="com.bphenriques" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="${logAppender:-STDOUT}"/>
+    </root>
+
+    <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator">
+        <resetJUL>true</resetJUL>
+    </contextListener>
+
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
+</configuration>
+

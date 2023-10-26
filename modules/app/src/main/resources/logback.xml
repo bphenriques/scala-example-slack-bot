@@ -1,0 +1,28 @@
+<configuration>
+    <appender name="JSONSTDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder
+                class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>timestamp</fieldName>
+                </timestamp>
+                <logLevel/>
+                <loggerName/>
+                <message/>
+                <threadName/>
+                <mdc/>
+                <throwableClassName/>
+                <throwableRootCauseClassName/>
+                <stackHash/>
+                <stackTrace/>
+            </providers>
+        </encoder>
+    </appender>
+
+    <logger name="com.bphenriques" level="INFO"/>
+    <logger name="org.asynchttpclient.netty"
+            level="INFO"/> <!-- Suppress accepted connect message spam, caused by loadbalancer during healthcheck -->
+    <root level="DEBUG">
+        <appender-ref ref="JSONSTDOUT"/>
+    </root>
+</configuration>
