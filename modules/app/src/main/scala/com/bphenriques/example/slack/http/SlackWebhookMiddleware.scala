@@ -12,8 +12,7 @@ import org.http4s.{AuthedRoutes, Headers, Request}
 import org.typelevel.ci.CIString
 
 import java.time.Instant
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
+import java.util.Base64
 import scala.concurrent.duration.DurationInt
 
 trait SlackWebhookMiddleware[F[_]] {
@@ -31,17 +30,9 @@ object SlackWebhookMiddleware {
 
   private def MaxTsDurationMs: Long = 5.minutes.toSeconds * 1000
 
-  def make[F[_]: Async](signingKey: String): SlackWebhookMiddleware[F] =
-    make(Clock[F].realTimeInstant, HmacSHA256.apply[F], signingKey)
+  def make[F[_]: Async](signingKey: String): SlackWebhookMiddleware[F] = make(Clock[F].realTimeInstant, signingKey)
 
   def make[F[_]: Async](timestampGen: F[Instant], signingKey: String): SlackWebhookMiddleware[F] =
-    make(timestampGen, HmacSHA256.apply[F], signingKey)
-
-  def make[F[_]: Async](
-    timestampGen: F[Instant],
-    hmacSHA256: HmacSHA256[F],
-    signingKey: String,
-  ): SlackWebhookMiddleware[F] =
     new SlackWebhookMiddleware[F] {
 
       override def middleware: AuthMiddleware[F, Unit] = {
@@ -50,9 +41,11 @@ object SlackWebhookMiddleware {
 
         def verifySignature(headers: SlackHeader, request: Request[F], signingKey: String): F[Unit] =
           request.bodyText.compile.string.flatMap { body =>
-            hmacSHA256
-              .generate(s"v0:${headers.requestTsStr}:$body", signingKey)
-              .map(signature => s"v0=$signature") // full signature
+            HmacSha256
+              .generate[F](s"v0:${headers.requestTsStr}:$body", signingKey) // In Base64
+              .map(Base64.getDecoder.decode)
+              .map(bytes => bytes.map("%02x".format(_)).mkString) // Hexadecimal representation of the bytes
+              .map(signature => s"v0=$signature")                 // full Slack's signature
               .map(_ == headers.signature)
               .ifM(Sync[F].unit, Sync[F].raiseError(InvalidSignature))
           }
@@ -110,34 +103,4 @@ object model {
     case object ExpiredTimestamp            extends SlackMiddleWareError(s"The given timestamp has expired")
     case object InvalidSignature extends SlackMiddleWareError("The provided signature does not match the expected.")
   }
-}
-
-trait HmacSHA256[F[_]] {
-  def generate(string: String, key: String): F[String]
-}
-
-// Should be the same as http4s but it does not match in the end, so this one is base on
-// https://github.com/slackapi/java-slack-sdk/blob/main/slack-app-backend/src/main/java/com/slack/api/app_backend/SlackSignature.java#L103C36-L103C49
-object HmacSHA256 {
-
-  def apply[F[_]: Sync]: HmacSHA256[F] = new HmacSHA256[F] {
-    val algorithm = "HmacSHA256"
-
-    override def generate(string: String, key: String): F[String] =
-      for {
-        mac <- Sync[F].delay {
-          val keySpec = new SecretKeySpec(key.getBytes, algorithm)
-          val mac     = Mac.getInstance(algorithm)
-          mac.init(keySpec)
-          mac
-        }
-        macBytes <- Sync[F].delay(mac.doFinal(string.getBytes))
-        hashValue = macBytes.foldLeft(new StringBuilder(2 * macBytes.length)) { case (ac, macByte) =>
-          ac.append(String.format("%02x", macByte & 0xff))
-        }
-      } yield hashValue.result()
-  }
-
-  // Should work but does not.
-  def http4s[F[_]: Async]: HmacSHA256[F] = HmacSha256.generate[F](_, _)
 }
