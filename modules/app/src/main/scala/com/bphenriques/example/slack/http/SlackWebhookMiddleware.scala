@@ -22,12 +22,11 @@ trait SlackWebhookMiddleware[F[_]] {
 
 // Based on https://github.com/slackapi/java-slack-sdk/blob/main/slack-app-backend/src/main/java/com/slack/api/app_backend/SlackSignature.java#L77
 // Copied here to avoid bundling the whole library as dependency.
-// Docs: https://typelevel.org/cats/datatypes/kleisli.html
-// TODO:
-// Either:
-//   1. Ask Slack to provide a verifier publicly in a smaller module that we can bridge with.
-//   2. Keep this approach but refine how we use HmacSha256 (potentially to be a part of the server as well?)
-// Ability to return Unauthorized with a `WWW-Authenticate` (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/WWW-Authenticate)
+// To read in more detail: https://typelevel.org/cats/datatypes/kleisli.html
+// FIXME: The HmacSha256 between Slack's and http4s have different result.
+// TODO: Consider asking Slack to provide a verifier publicly in a smaller module that we can bridge with.
+// TODO: Fix the server returning 500 rather than the http code in the onError
+// TODO: Use Unauthorized that in turns requires a  `WWW-Authenticate`, in turn a Challenge.
 object SlackWebhookMiddleware {
 
   private def MaxTsDurationMs: Long = 5.minutes.toSeconds * 1000
@@ -47,14 +46,15 @@ object SlackWebhookMiddleware {
 
       override def middleware: AuthMiddleware[F, Unit] = {
         def validateTimestamp(nowMilli: Long, headers: SlackHeader): Either[SlackMiddleWareError, Unit] =
-          headers.timestamp.flatMap(ts => Either.cond(nowMilli - ts < MaxTsDurationMs, (), expiredTimestamp))
+          headers.timestamp.flatMap(ts => Either.cond(nowMilli - ts < MaxTsDurationMs, (), ExpiredTimestamp))
 
         def verifySignature(headers: SlackHeader, request: Request[F], signingKey: String): F[Unit] =
           request.bodyText.compile.string.flatMap { body =>
             hmacSHA256
               .generate(s"v0:${headers.requestTsStr}:$body", signingKey)
+              .map(signature => s"v0=$signature") // full signature
               .map(_ == headers.signature)
-              .ifM(Sync[F].unit, Sync[F].raiseError(invalidSignature))
+              .ifM(Sync[F].unit, Sync[F].raiseError(InvalidSignature))
           }
 
         val authRequestEither: Kleisli[F, Request[F], Either[SlackMiddleWareError, Unit]] = Kleisli { request =>
@@ -86,7 +86,7 @@ object model {
   case class SlackHeader(requestTsStr: String, signature: String) {
 
     def timestamp: Either[SlackMiddleWareError, Long] =
-      Either.catchOnly[NumberFormatException](requestTsStr.toLong * 1000).leftMap(_ => invalidTimestamp(requestTsStr))
+      Either.catchOnly[NumberFormatException](requestTsStr.toLong * 1000).leftMap(_ => InvalidTimestamp(requestTsStr))
   }
 
   object SlackHeader {
@@ -95,8 +95,8 @@ object model {
 
     def apply(headers: Headers): Either[SlackMiddleWareError, SlackHeader] =
       (
-        headers.get(RequestTimestamp).map(_.head.sanitizedValue.trim).toRight(invalidHeaders),
-        headers.get(Signature).map(_.head.sanitizedValue.trim).toRight(invalidHeaders),
+        headers.get(RequestTimestamp).map(_.head.sanitizedValue.trim).toRight(InvalidHeaders),
+        headers.get(Signature).map(_.head.sanitizedValue.trim).toRight(InvalidHeaders),
       ).mapN(SlackHeader.apply)
   }
 
@@ -109,11 +109,6 @@ object model {
     case class InvalidTimestamp(ts: String) extends SlackMiddleWareError(s"The provided timestamp is invalid: $ts")
     case object ExpiredTimestamp            extends SlackMiddleWareError(s"The given timestamp has expired")
     case object InvalidSignature extends SlackMiddleWareError("The provided signature does not match the expected.")
-
-    def invalidHeaders: SlackMiddleWareError               = InvalidHeaders
-    def invalidTimestamp(ts: String): SlackMiddleWareError = InvalidTimestamp(ts)
-    def expiredTimestamp: SlackMiddleWareError             = ExpiredTimestamp
-    def invalidSignature: SlackMiddleWareError             = InvalidSignature
   }
 }
 
@@ -140,10 +135,9 @@ object HmacSHA256 {
         hashValue = macBytes.foldLeft(new StringBuilder(2 * macBytes.length)) { case (ac, macByte) =>
           ac.append(String.format("%02x", macByte & 0xff))
         }
-      } yield s"v0=$hashValue"
+      } yield hashValue.result()
   }
 
   // Should work but does not.
-  // Plus.. does not make sense adding random "v0=" in here.
   def http4s[F[_]: Async]: HmacSHA256[F] = HmacSha256.generate[F](_, _)
 }
