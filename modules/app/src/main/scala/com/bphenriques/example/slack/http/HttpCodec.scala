@@ -80,7 +80,8 @@ object HttpCodec {
       field[String]("channel_name"),
       field[String]("command"),
       field[String]("response_url"),
-      field[String]("teams_domain"),
+      field[String]("team_domain"),
+      // Missing text
       field[String]("team_id"),
       field[String]("token"),
       field[String]("trigger_id"),

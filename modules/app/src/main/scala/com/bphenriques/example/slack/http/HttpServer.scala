@@ -31,7 +31,7 @@ class HttpServer(service: MyService, slackMiddleWare: SlackWebhookMiddleware[IO]
   val healthRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] { case GET -> Root / "health" => Ok() }
 
   val slackRoutes: AuthedRoutes[Unit, IO] = AuthedRoutes.of[Unit, IO] {
-    case authRequest @ GET -> Root / "slack" / "events" as _ =>
+    case authRequest @ POST -> Root / "slack" / "events" as _ =>
       for {
         _        <- authRequest.req.as[SlackForm]
         response <- Ok()
