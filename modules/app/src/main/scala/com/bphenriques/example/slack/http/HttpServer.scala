@@ -9,14 +9,12 @@ import com.comcast.ip4s.IpLiteralSyntax
 import org.http4s.FormDataDecoder.formEntityDecoder
 import org.http4s.dsl.io._
 import org.http4s.ember.server._
-import org.http4s.server.middleware.Logger
-import org.http4s.{AuthedRoutes, HttpApp, HttpRoutes}
-import org.typelevel.log4cats.SelfAwareStructuredLogger
-import org.typelevel.log4cats.slf4j.{Slf4jFactory, Slf4jLogger}
+import org.http4s.server.middleware.{ErrorAction, ErrorHandling}
+import org.http4s.{AuthedRoutes, HttpRoutes}
+import org.typelevel.log4cats.StructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jFactory
 
-class HttpServer(service: MyService, slackMiddleWare: SlackWebhookMiddleware[IO]) {
-  implicit val loggerFactory: Slf4jFactory[IO]    = Slf4jFactory.create[IO]
-  implicit val log: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+class HttpServer(service: MyService, slackMiddleWare: SlackWebhookMiddleware[IO])(implicit log: StructuredLogger[IO]) {
 
   def routes: HttpRoutes[IO] = serviceRoutes <+> slackMiddleWare.middleware(slackRoutes) <+> healthRoutes
 
@@ -35,19 +33,27 @@ class HttpServer(service: MyService, slackMiddleWare: SlackWebhookMiddleware[IO]
   val slackRoutes: AuthedRoutes[Unit, IO] = AuthedRoutes.of[Unit, IO] {
     case authRequest @ GET -> Root / "slack" / "events" as _ =>
       for {
-        _    <- authRequest.req.as[SlackForm]
+        _        <- authRequest.req.as[SlackForm]
         response <- Ok()
       } yield response
   }
 
   def run: IO[Unit] = {
-    val app: HttpApp[IO] = Logger.httpApp(logHeaders = true, logBody = true)(routes.orNotFound)
+    implicit val loggerFactory: Slf4jFactory[IO] = Slf4jFactory.create[IO]
+
+    val withErrorLogging = ErrorHandling.Recover.total(
+      ErrorAction.log(
+        routes.orNotFound,
+        messageFailureLogAction = (throwable, message) => log.info(throwable)(message),
+        serviceErrorLogAction = (throwable, message) => log.info(throwable)(message),
+      ),
+    )
 
     EmberServerBuilder
       .default[IO]
       .withHost(ipv4"0.0.0.0")
       .withPort(port"8080")
-      .withHttpApp(app)
+      .withHttpApp(withErrorLogging)
       .build
       .useForever
   }
