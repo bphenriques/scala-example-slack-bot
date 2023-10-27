@@ -11,19 +11,19 @@ case class Config(
 object Config {
 
   case class Slack(
-    someConfig: String
+    slackBotToken: String,
+    signingKey: String,
   )
 
   object Slack {
 
-    val value: ConfigValue[IO, Slack] = (
-      env("DATABASE_USER"),
-      env("DATABASE_PASSWORD").redacted,
-      env("DATABASE_URL"),
-      env("DATABASE_DRIVER"),
-    ).parMapN(Slack.apply)
+    val value: ConfigValue[IO, Slack] =
+      (
+        env("SLACK_BOT_TOKEN"),
+        env("SLACK_SIGNING_SECRET"),
+      ).mapN(Slack.apply)
   }
 
   def value: ConfigValue[IO, Config] =
-    Slack.value.parMapN(Config.apply)
+    Slack.value.map(Config.apply)
 }

@@ -18,7 +18,7 @@ object model {
       Form(requestId, requestedAt, partial.field, partial.action)
   }
 
-  trait Status
+  sealed trait Status
 
   object Status {
     case object Pending  extends Status
