@@ -7,16 +7,16 @@ import com.bphenriques.example.slack.http.HttpRequests.SlackForm
 import com.bphenriques.example.slack.services.MyService
 import com.comcast.ip4s.IpLiteralSyntax
 import org.http4s.FormDataDecoder.formEntityDecoder
+import org.http4s.HttpRoutes
 import org.http4s.dsl.io._
 import org.http4s.ember.server._
 import org.http4s.server.middleware.{ErrorAction, ErrorHandling}
-import org.http4s.{AuthedRoutes, HttpRoutes}
 import org.typelevel.log4cats.StructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jFactory
 
 class HttpServer(service: MyService, slackMiddleWare: SlackWebhookMiddleware[IO])(implicit log: StructuredLogger[IO]) {
 
-  def routes: HttpRoutes[IO] = serviceRoutes <+> slackMiddleWare.middleware(slackRoutes) <+> healthRoutes
+  def routes: HttpRoutes[IO] = serviceRoutes <+> slackMiddleWare.verifySlackRequest(slackRoutes) <+> healthRoutes
 
   val serviceRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] {
     case _ @GET -> Root / "form" / id => Ok(s"The status of $id ...")
@@ -30,12 +30,11 @@ class HttpServer(service: MyService, slackMiddleWare: SlackWebhookMiddleware[IO]
 
   val healthRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] { case GET -> Root / "health" => Ok() }
 
-  val slackRoutes: AuthedRoutes[Unit, IO] = AuthedRoutes.of[Unit, IO] {
-    case authRequest @ POST -> Root / "slack" / "events" as _ =>
-      for {
-        _        <- authRequest.req.as[SlackForm]
-        response <- Ok()
-      } yield response
+  val slackRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] { case req @ POST -> Root / "slack" / "events" =>
+    for {
+      _        <- req.as[SlackForm]
+      response <- Ok()
+    } yield response
   }
 
   def run: IO[Unit] = {

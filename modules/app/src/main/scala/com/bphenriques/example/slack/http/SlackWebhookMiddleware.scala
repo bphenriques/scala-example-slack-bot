@@ -5,10 +5,9 @@ import cats.effect.{Async, Clock, Sync}
 import cats.syntax.all._
 import com.bphenriques.example.slack.http.model.SlackMiddleWareError._
 import com.bphenriques.example.slack.http.model._
+import org.http4s._
 import org.http4s.client.oauth1.HmacSha256
-import org.http4s.dsl.Http4sDsl
 import org.http4s.server._
-import org.http4s.{AuthedRoutes, Headers, Request}
 import org.typelevel.ci.CIString
 
 import java.time.Instant
@@ -16,16 +15,10 @@ import java.util.Base64
 import scala.concurrent.duration.DurationInt
 
 trait SlackWebhookMiddleware[F[_]] {
-  def middleware: AuthMiddleware[F, Unit]
+  def verifySlackRequest: HttpMiddleware[F]
 }
 
-// Based on https://github.com/slackapi/java-slack-sdk/blob/main/slack-app-backend/src/main/java/com/slack/api/app_backend/SlackSignature.java#L77
-// Copied here to avoid bundling the whole library as dependency.
-// To read in more detail: https://typelevel.org/cats/datatypes/kleisli.html
-// FIXME: The HmacSha256 between Slack's and http4s have different result.
-// TODO: Consider asking Slack to provide a verifier publicly in a smaller module that we can bridge with.
-// TODO: Fix the server returning 500 rather than the http code in the onError
-// TODO: Use Unauthorized that in turns requires a  `WWW-Authenticate`, in turn a Challenge.
+// Slack Token verifier: https://api.slack.com/authentication/verifying-requests-from-slack
 object SlackWebhookMiddleware {
 
   private def MaxTsDurationMs: Long = 5.minutes.toSeconds * 1000
@@ -35,41 +28,42 @@ object SlackWebhookMiddleware {
   def make[F[_]: Async](timestampGen: F[Instant], signingKey: String): SlackWebhookMiddleware[F] =
     new SlackWebhookMiddleware[F] {
 
-      override def middleware: AuthMiddleware[F, Unit] = {
-        def validateTimestamp(nowMilli: Long, headers: SlackHeader): Either[SlackMiddleWareError, Unit] =
+      override def verifySlackRequest: HttpMiddleware[F] = {
+        def checkExpiredTimestamp(nowMilli: Long, headers: SlackHeader): Either[SlackMiddleWareError, Unit] =
           headers.timestamp.flatMap(ts => Either.cond(nowMilli - ts < MaxTsDurationMs, (), ExpiredTimestamp))
 
-        def verifySignature(headers: SlackHeader, request: Request[F], signingKey: String): F[Unit] =
-          request.bodyText.compile.string.flatMap { body =>
-            HmacSha256
-              .generate[F](s"v0:${headers.requestTsStr}:$body", signingKey) // In Base64
-              .map(Base64.getDecoder.decode)
-              .map(bytes => bytes.map("%02x".format(_)).mkString) // Hexadecimal representation of the bytes
-              .map(signature => s"v0=$signature")                 // full Slack's signature
-              .map(_ == headers.signature)
-              .ifM(Sync[F].unit, Sync[F].raiseError(InvalidSignature))
+        def checkSignature(
+          headers: SlackHeader,
+          request: Request[F],
+          signingKey: String,
+        ): EitherT[F, SlackMiddleWareError, Unit] =
+          EitherT(
+            request.bodyText.compile.string.flatMap { body =>
+              HmacSha256
+                .generate[F](s"v0:${headers.requestTsStr}:$body", signingKey) // In Base64
+                .map(Base64.getDecoder.decode)
+                .map(bytes => bytes.map("%02x".format(_)).mkString) // Hexadecimal representation of the bytes
+                .map(signature => s"v0=$signature")                 // full Slack's signature
+                .map(expected => Either.cond(expected == headers.signature, (), InvalidSignature))
+            },
+          )
+
+        (routes: HttpRoutes[F]) =>
+          Kleisli { (request: Request[F]) =>
+            val result: F[Option[Response[F]]] =
+              (timestampGen, Sync[F].fromEither(SlackHeader(request.headers))).flatMapN { case (now, headers) =>
+                EitherT
+                  .fromEither(checkExpiredTimestamp(now.toEpochMilli, headers))
+                  .combine(checkSignature(headers, request, signingKey))
+                  .value
+                  .flatMap {
+                    case Left(_)  => Sync[F].pure(Option(Response[F](Status.Unauthorized))) // FIXME: Add error message
+                    case Right(_) => routes(request).value
+                  }
+              }
+
+            OptionT(result)
           }
-
-        val authRequestEither: Kleisli[F, Request[F], Either[SlackMiddleWareError, Unit]] = Kleisli { request =>
-          EitherT
-            .liftF(
-              for {
-                now     <- timestampGen
-                headers <- Sync[F].fromEither(SlackHeader(request.headers))
-                _       <- Sync[F].fromEither(validateTimestamp(now.toEpochMilli, headers))
-                _       <- verifySignature(headers, request, signingKey)
-              } yield (),
-            )
-            .value
-        }
-
-        val onFailure: AuthedRoutes[SlackMiddleWareError, F] = {
-          val dsl = new Http4sDsl[F] {}
-          import dsl._
-          Kleisli(req => OptionT.liftF(Forbidden(req.context.getMessage)))
-        }
-
-        AuthMiddleware(authRequestEither, onFailure)
       }
     }
 }
