@@ -19,6 +19,7 @@ trait SlackWebhookMiddleware[F[_]] {
 }
 
 // Slack Token verifier: https://api.slack.com/authentication/verifying-requests-from-slack
+// Potential TODO: verify api_app_id, in this case A06344ZRW2E
 object SlackWebhookMiddleware {
 
   private def MaxTsDurationMs: Long = 5.minutes.toSeconds * 1000

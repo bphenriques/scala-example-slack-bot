@@ -1,7 +1,6 @@
 <configuration>
     <appender name="JSONSTDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder
-                class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
             <providers>
                 <timestamp>
                     <fieldName>timestamp</fieldName>
@@ -20,6 +19,8 @@
     </appender>
 
     <logger name="com.bphenriques" level="INFO"/>
+    <logger name="com.slack.api" level="WARN"/> <!-- shhhh -->
+
     <logger name="org.asynchttpclient.netty"
             level="INFO"/> <!-- Suppress accepted connect message spam, caused by loadbalancer during healthcheck -->
     <root level="DEBUG">

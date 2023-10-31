@@ -9,13 +9,14 @@ object HttpRequests {
     case class Response(form: Form)
   }
 
-  case class SlackForm(
+  case class SlackSlashCommandTrigger(
     apiAppId: String,
     channelId: String,
     channelName: String,
     command: String,
     responseUrl: String,
     teamsDomain: String,
+    text: String,
     teamId: String,
     token: String,
     triggerId: String,

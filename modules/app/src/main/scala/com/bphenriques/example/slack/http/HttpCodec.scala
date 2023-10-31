@@ -2,7 +2,7 @@ package com.bphenriques.example.slack.http
 
 import cats.effect.IO
 import cats.syntax.all._
-import com.bphenriques.example.slack.http.HttpRequests.SlackForm
+import com.bphenriques.example.slack.http.HttpRequests.SlackSlashCommandTrigger
 import com.bphenriques.example.slack.model.{Form, Status}
 import io.circe._
 import io.circe.syntax._
@@ -50,7 +50,7 @@ object HttpCodec {
 
   implicit lazy val encodeFormResponse: Encoder[HttpRequests.SubmitForm.Response] = _.form.asJson
 
-  implicit val entityDecodeFormRequest: EntityDecoder[IO, HttpRequests.SubmitForm.Request] =
+  implicit lazy val entityDecodeFormRequest: EntityDecoder[IO, HttpRequests.SubmitForm.Request] =
     jsonOf[IO, HttpRequests.SubmitForm.Request]
 
   implicit lazy val entityEncodeFormResponse: EntityEncoder[IO, HttpRequests.SubmitForm.Response] =
@@ -73,7 +73,7 @@ object HttpCodec {
     Codec.from(d, e)
   }
 
-  implicit val decoder: FormDataDecoder[SlackForm] =
+  implicit val decoder: FormDataDecoder[SlackSlashCommandTrigger] =
     (
       field[String]("api_app_id"),
       field[String]("channel_id"),
@@ -81,11 +81,11 @@ object HttpCodec {
       field[String]("command"),
       field[String]("response_url"),
       field[String]("team_domain"),
-      // Missing text
+      field[String]("text"),
       field[String]("team_id"),
       field[String]("token"),
       field[String]("trigger_id"),
       field[String]("user_id"),
       field[String]("user_name"),
-    ).mapN(SlackForm.apply)
+    ).mapN(SlackSlashCommandTrigger.apply)
 }

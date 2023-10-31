@@ -26,7 +26,7 @@ val munitCatsEffectV = "2.0.0-M3"
 
 val munitV = "0.7.29"
 
-val slackV = "1.34.0"
+val slackV = "1.35.0"
 
 val slf4jV = "2.0.9"
 
@@ -66,24 +66,25 @@ lazy val root = (project in file("."))
 
 lazy val app = (project in file("modules/app"))
   .settings(
-    moduleName := "app",
-    name       := moduleName.value,
+    moduleName               := "app",
+    name                     := moduleName.value,
     coverageFailOnMinimum    := true,
     coverageMinimumStmtTotal := 10, // FIXME
     libraryDependencies ++= Seq(
-      "com.slack.api" % "slack-api-client" % slackV,
+      "com.slack.api"        % "slack-api-client"    % slackV,
       "is.cir"              %% "ciris"               % cirisV,
       "org.typelevel"       %% "cats-core"           % catsV,
       "org.typelevel"       %% "cats-effect"         % catsEffectV,
       "io.circe"            %% "circe-parser"        % circeV,
+      "io.circe"            %% "circe-literal"       % circeV,
       "org.http4s"          %% "http4s-ember-client" % http4sV, // required to get access to signature
       "org.http4s"          %% "http4s-ember-server" % http4sV,
       "org.http4s"          %% "http4s-dsl"          % http4sV,
       "org.http4s"          %% "http4s-circe"        % http4sV,
       "co.fs2"              %% "fs2-core"            % fs2V,
       "co.fs2"              %% "fs2-io"              % fs2V,
-      "org.scalameta"       %% "munit"               % munitV             % Test,
-      "org.typelevel"       %% "munit-cats-effect"   % munitCatsEffectV   % Test,
+      "org.scalameta"       %% "munit"               % munitV % Test,
+      "org.typelevel"       %% "munit-cats-effect"   % munitCatsEffectV % Test,
       "com.alejandrohdezma" %% "http4s-munit"        % http4sMunitVersion % Test,
     ),
   )

@@ -9,6 +9,7 @@ import java.time.Instant
 
 trait MyService {
   def register(request: Form.Partial): IO[Form]
+  def listOptions(): IO[List[String]]
 }
 
 object MyService {
@@ -26,5 +27,10 @@ object MyService {
       _ <- logWithRequestId.info(s"Submitting... $request")
       result = Form(requestId, requestedAt, request)
     } yield result
+
+
+    def listOptions(): IO[List[String]] = IO(
+      List("Dobbie", "Turtle", "Berty")
+    )
   }
 }
