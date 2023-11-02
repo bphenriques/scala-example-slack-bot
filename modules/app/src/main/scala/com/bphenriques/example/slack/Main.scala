@@ -3,9 +3,10 @@ package com.bphenriques.example.slack
 import cats.effect.kernel.Resource.ExitCase
 import cats.effect.std.UUIDGen
 import cats.effect.{IO, IOApp, Resource}
-import com.bphenriques.example.slack.http.{HttpServer, SlackWebhookMiddleware}
+import com.bphenriques.example.slack.http.HttpServer
 import com.bphenriques.example.slack.services.{MyService, SlackBot}
-import com.bphenriques.example.slack.slack.Slack
+import com.bphenriques.example.slack.slack.{Http4sSlackProxy, Slack}
+import com.slack.api.bolt.{App, AppConfig}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 
@@ -25,10 +26,17 @@ object Main extends IOApp.Simple {
     config <- Resource.eval(Config.value.load[IO])
     logger <- loggerR
     service         = MyService(UUIDGen[IO].randomUUID.map(_.toString), IO.realTimeInstant)
-    slackMiddleWare = SlackWebhookMiddleware.make[IO](config.slack.signingKey)
-    slackClient <- Slack.make(config.slack.slackBotToken)
-    slackBot = SlackBot.make(slackClient, service)(logger)
-    server   = new HttpServer(service, slackBot, slackMiddleWare)(logger)
+    slackBot <- Slack.make(config.slack.slackBotToken).map(SlackBot.make(_, service)(logger))
+    slackServerApp <- Resource.eval(
+      IO(
+        AppConfig
+          .builder()
+          .singleTeamBotToken(config.slack.slackBotToken)
+          .signingSecret(config.slack.signingKey)
+          .build(),
+      ).map(slackConfig => new App(slackConfig)),
+    )
+    http4sSlackProxy = Http4sSlackProxy.make[IO](slackServerApp.config())
+    server           = new HttpServer(slackBot, http4sSlackProxy)(logger)
   } yield (server, logger)
-
 }

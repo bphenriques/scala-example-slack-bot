@@ -7,15 +7,16 @@ object model {
   case class Form(
     requestId: String,
     requestedAt: Instant,
-    field: String,
+    location: String,
+    subLocation: String,
     status: Status,
   )
 
   object Form {
-    case class Partial(field: String, action: Status)
+    case class Partial(location: String, subLocation: String, action: Status)
 
     def apply(requestId: String, requestedAt: Instant, partial: Partial): Form =
-      Form(requestId, requestedAt, partial.field, partial.action)
+      Form(requestId, requestedAt, partial.location, partial.subLocation, partial.action)
   }
 
   sealed trait Status

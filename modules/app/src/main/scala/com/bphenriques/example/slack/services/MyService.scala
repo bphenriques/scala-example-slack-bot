@@ -9,10 +9,17 @@ import java.time.Instant
 
 trait MyService {
   def register(request: Form.Partial): IO[Form]
-  def listOptions(): IO[List[String]]
+  def listLocations(): IO[List[String]]
+  def listSubLocations(location: String): IO[List[String]]
 }
 
 object MyService {
+
+  val mockState = Map(
+    "Location 1" -> List("Sub Location 1", "Sub Location 2", "Sub Location 3"),
+    "Location 2" -> List("Sub Location 4", "Sub Location 5", "Sub Location 6"),
+    "Location 3" -> List("Sub Location 7", "Sub Location 8", "Sub Location 9"),
+  )
 
   def apply(
     uuidGen: IO[String],
@@ -28,9 +35,12 @@ object MyService {
       result = Form(requestId, requestedAt, request)
     } yield result
 
+    def listLocations(): IO[List[String]] =
+      log.info(s"Getting locations...") >>
+        IO(mockState.keys.toList)
 
-    def listOptions(): IO[List[String]] = IO(
-      List("Dobbie", "Turtle", "Berty")
-    )
+    def listSubLocations(location: String): IO[List[String]] =
+      log.info(s"Getting sub locations for $location") >>
+        IO(mockState.getOrElse(location, List.empty))
   }
 }

@@ -2,13 +2,10 @@ package com.bphenriques.example.slack.http
 
 import cats.effect._
 import cats.syntax.all._
-import com.bphenriques.example.slack.http.HttpCodec._
-import com.bphenriques.example.slack.http.HttpRequests.SlackSlashCommandTrigger
-import com.bphenriques.example.slack.services.{MyService, SlackBot}
-import com.bphenriques.example.slack.slack.model.ResponseAction
-import com.bphenriques.example.slack.slack.HttpCodec._
+import com.bphenriques.example.slack.services.SlackBot
+import com.bphenriques.example.slack.slack.Http4sSlackProxy
 import com.comcast.ip4s.IpLiteralSyntax
-import org.http4s.FormDataDecoder.formEntityDecoder
+import com.slack.api.bolt.request.builtin.{SlashCommandRequest, ViewSubmissionRequest}
 import org.http4s.HttpRoutes
 import org.http4s.dsl.io._
 import org.http4s.ember.server._
@@ -16,29 +13,33 @@ import org.http4s.server.middleware.{ErrorAction, ErrorHandling}
 import org.typelevel.log4cats.StructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jFactory
 
-import scala.annotation.unused
-
-class HttpServer(@unused service: MyService, slackBot: SlackBot, slackMiddleWare: SlackWebhookMiddleware[IO])(implicit
-                                                                                                              log: StructuredLogger[IO],
+class HttpServer(slackBot: SlackBot, http4sSlackProxy: Http4sSlackProxy[IO])(implicit
+  log: StructuredLogger[IO],
 ) {
 
-  def routes: HttpRoutes[IO] = slackMiddleWare.verifySlackRequest(slackRoutes) <+> healthRoutes
+  def routes: HttpRoutes[IO] = http4sSlackProxy.verifySlackHeaders(slackRoutes) <+> healthRoutes
 
   val healthRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] { case GET -> Root / "health" => Ok() }
 
   // Must be answered within 3000 milliseconds: https://api.slack.com/interactivity/slash-commands#responding_basic_receipt
   val slackRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] {
     case req @ POST -> Root / "slack" / "events" =>
-      for {
-        request  <- req.as[SlackSlashCommandTrigger]
-        _        <- slackBot.handleSlashCommand(request)
-        response <- Ok()
-      } yield response
+      http4sSlackProxy
+        .http4sToSlackRequest(req)
+        .flatMap {
+          case e: SlashCommandRequest => slackBot.handleSlashCommand(e).flatMap(http4sSlackProxy.slackResponseToHttp4)
+          case other =>
+            log.warn(s"Unhandled type of response in the events endpoint ${other.getRequestType.name()}") >> Ok()
+        }
     case req @ POST -> Root / "slack" / "interactivity" =>
-      for {
-        _        <- req.as[ResponseAction]
-        response <- Ok()
-      } yield response
+      http4sSlackProxy
+        .http4sToSlackRequest(req)
+        .flatMap {
+          case viewSubmission: ViewSubmissionRequest =>
+            slackBot.handleViewSubmission(viewSubmission).flatMap(http4sSlackProxy.slackResponseToHttp4)
+          case other =>
+            log.warn(s"Unhandled type of response in the interactivity endpoint ${other.getRequestType.name()}") >> Ok()
+        }
   }
 
   def run: IO[Unit] = {

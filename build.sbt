@@ -72,6 +72,7 @@ lazy val app = (project in file("modules/app"))
     coverageMinimumStmtTotal := 10, // FIXME
     libraryDependencies ++= Seq(
       "com.slack.api"        % "slack-api-client"    % slackV,
+      "com.slack.api"        % "bolt"                % slackV,
       "is.cir"              %% "ciris"               % cirisV,
       "org.typelevel"       %% "cats-core"           % catsV,
       "org.typelevel"       %% "cats-effect"         % catsEffectV,
