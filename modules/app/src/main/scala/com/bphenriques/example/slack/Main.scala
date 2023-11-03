@@ -4,7 +4,7 @@ import cats.effect.kernel.Resource.ExitCase
 import cats.effect.std.UUIDGen
 import cats.effect.{IO, IOApp, Resource}
 import com.bphenriques.example.slack.http.HttpServer
-import com.bphenriques.example.slack.services.{MyService, SlackBot}
+import com.bphenriques.example.slack.services.{SantaClausService, SlackBot}
 import com.bphenriques.example.slack.slack.{Http4sSlackProxy, Slack}
 import com.slack.api.bolt.{App, AppConfig}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -25,7 +25,7 @@ object Main extends IOApp.Simple {
   private def resources: Resource[IO, (HttpServer, Logger[IO])] = for {
     config <- Resource.eval(Config.value.load[IO])
     logger <- loggerR
-    service         = MyService(UUIDGen[IO].randomUUID.map(_.toString), IO.realTimeInstant)
+    service         = SantaClausService(UUIDGen[IO].randomUUID.map(_.toString), IO.realTimeInstant)(logger)
     slackBot <- Slack.make(config.slack.slackBotToken).map(SlackBot.make(_, service)(logger))
     slackServerApp <- Resource.eval(
       IO(

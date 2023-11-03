@@ -5,7 +5,7 @@ import cats.syntax.all._
 import com.bphenriques.example.slack.services.SlackBot
 import com.bphenriques.example.slack.slack.Http4sSlackProxy
 import com.comcast.ip4s.IpLiteralSyntax
-import com.slack.api.bolt.request.builtin.{SlashCommandRequest, ViewSubmissionRequest}
+import com.slack.api.bolt.request.builtin.{BlockActionRequest, SlashCommandRequest, ViewSubmissionRequest}
 import org.http4s.HttpRoutes
 import org.http4s.dsl.io._
 import org.http4s.ember.server._
@@ -37,6 +37,8 @@ class HttpServer(slackBot: SlackBot, http4sSlackProxy: Http4sSlackProxy[IO])(imp
         .flatMap {
           case viewSubmission: ViewSubmissionRequest =>
             slackBot.handleViewSubmission(viewSubmission).flatMap(http4sSlackProxy.slackResponseToHttp4)
+          case blockCenas: BlockActionRequest =>
+            log.info(s"Received block actions ${blockCenas.getRequestBodyAsString}") >> Ok()
           case other =>
             log.warn(s"Unhandled type of response in the interactivity endpoint ${other.getRequestType.name()}") >> Ok()
         }

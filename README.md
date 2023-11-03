@@ -1,6 +1,20 @@
 # Slack Bot Example
 
-Example project to test Slack Apps. Disclaimer: I am no expert...
+Example project to test Slack Apps on the Christmas theme. I am no expert, but I hope this helps you out.
+
+The flow setup here:
+1. User calls `/interactive-form`, in turn, the server will:
+   1. Submit an [`view.open`](https://api.slack.com/methods/views.open) API call to display a form with a pre-computed
+      set of options.
+   2. Acknowledge the response back to slack.
+2. User fills the form and presses submit:
+   1. To test form validations, a text field has to match exactly the String "Hello there!".
+   2. If everything is alright, the form is accepted.
+3. The server will receive a `view_submission` with the content of the form:
+   1. For now, the final result is just logged.
+
+Limitations:
+- Issues when returning an updated view as part of the `view_submission` webhook.
 
 ## Setup
 
@@ -33,7 +47,7 @@ Install a Slack App (https://api.slack.com/start/quickstart):
 
 1. Run ngrok: `ngrok http 8080`
 2. Run the app: `./run.sh`
-3. On the slack workspace, update the application to point to the ngrok's URL followed by `/slack/events/`
+3. Review the slash command and the interactivity webhooks in the Slack application.
 4. Enter the Slack's slash command.
 
 ### Test

@@ -4,19 +4,23 @@ import java.time.Instant
 
 object model {
 
-  case class Form(
+  case class SantaClausRequest(
     requestId: String,
     requestedAt: Instant,
-    location: String,
-    subLocation: String,
+    gift: String,
+    reason: String,
     status: Status,
   )
 
-  object Form {
-    case class Partial(location: String, subLocation: String, action: Status)
+  object SantaClausRequest {
 
-    def apply(requestId: String, requestedAt: Instant, partial: Partial): Form =
-      Form(requestId, requestedAt, partial.location, partial.subLocation, partial.action)
+    def fromSubmission(requestId: String, requestedAt: Instant, command: Command.Request): SantaClausRequest =
+      SantaClausRequest(requestId, requestedAt, command.gift, command.reason, Status.Pending)
+  }
+
+  object Command {
+    case class Request(gift: String, reason: String)
+    case class SetOutcome(id: String, outcome: Status)
   }
 
   sealed trait Status
