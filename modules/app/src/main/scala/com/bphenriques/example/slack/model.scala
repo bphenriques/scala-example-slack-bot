@@ -7,6 +7,7 @@ object model {
   case class SantaClausRequest(
     requestId: String,
     requestedAt: Instant,
+    requestedByName: String,
     gift: String,
     reason: String,
     status: Status,
@@ -15,12 +16,12 @@ object model {
   object SantaClausRequest {
 
     def fromSubmission(requestId: String, requestedAt: Instant, command: Command.Request): SantaClausRequest =
-      SantaClausRequest(requestId, requestedAt, command.gift, command.reason, Status.Pending)
+      SantaClausRequest(requestId, requestedAt, command.requestedByName, command.gift, command.reason, Status.Pending)
   }
 
   object Command {
-    case class Request(gift: String, reason: String)
-    case class SetOutcome(id: String, outcome: Status)
+    case class Request(requestedByName: String, gift: String, reason: String)
+    case class SetOutcome(requestId: String, outcome: Status)
   }
 
   sealed trait Status

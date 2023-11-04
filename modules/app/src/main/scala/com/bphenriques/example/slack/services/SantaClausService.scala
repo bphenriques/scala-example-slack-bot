@@ -7,12 +7,21 @@ import org.typelevel.log4cats.StructuredLogger
 
 import java.time.Instant
 
+sealed abstract class ServiceError(message: String) extends RuntimeException(s"Service Error: $message")
+
+object ServiceError {
+  case class InvalidInput(message: String) extends ServiceError(message)
+}
+
 trait SantaClausService {
   def request(request: Command.Request): IO[SantaClausRequest]
+  def setOutcome(request: Command.SetOutcome): IO[Unit]
   def listPossibleGifts(): IO[List[String]]
 }
 
 object SantaClausService {
+
+  val ValidReason = "I love my family"
 
   // Slack API is limited to 100...
   private val examplePresents: List[String] =
@@ -31,11 +40,16 @@ object SantaClausService {
     new SantaClausService {
 
       def request(request: Command.Request): IO[SantaClausRequest] =
-        (uuidGen, instantGen).flatMapN { case (requestId, requestedAt) =>
-          val logWithRequestId = log.addContext(Map("request_id" -> requestId))
-          logWithRequestId.info(s"Registering $request") >>
-            SantaClausRequest.fromSubmission(requestId, requestedAt, request).pure[IO]
-        }
+        if (request.reason == ValidReason)
+          (uuidGen, instantGen).flatMapN { case (requestId, requestedAt) =>
+            val logWithRequestId = log.addContext(Map("request_id" -> requestId))
+            logWithRequestId.info(s"Registering $request") >>
+              SantaClausRequest.fromSubmission(requestId, requestedAt, request).pure[IO]
+          }
+        else IO.raiseError(ServiceError.InvalidInput(s"The reason is not '$ValidReason'"))
+
+      def setOutcome(request: Command.SetOutcome): IO[Unit] =
+        log.info(s"Setting outcome of ${request.requestId} to ${request.outcome}")
 
       def listPossibleGifts(): IO[List[String]] = log.info(s"Getting locations...") >> IO(examplePresents)
     }

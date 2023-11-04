@@ -1,10 +1,10 @@
 package com.bphenriques.example.slack.slack
 
 import cats.effect.{IO, Resource}
-import cats.implicits.catsSyntaxMonadError
-import com.slack.api.methods.request.chat.ChatPostEphemeralRequest
+import cats.syntax.all._
+import com.slack.api.methods.request.chat.{ChatDeleteRequest, ChatPostEphemeralRequest, ChatPostMessageRequest}
 import com.slack.api.methods.request.views.{ViewsOpenRequest, ViewsPublishRequest, ViewsPushRequest, ViewsUpdateRequest}
-import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
+import com.slack.api.methods.response.chat.{ChatDeleteResponse, ChatPostEphemeralResponse, ChatPostMessageResponse}
 import com.slack.api.methods.response.views.{ViewsOpenResponse, ViewsPublishResponse, ViewsPushResponse, ViewsUpdateResponse}
 import com.slack.api.methods.{AsyncMethodsClient, SlackApiException, SlackApiTextResponse}
 import com.slack.api.model.ErrorResponseMetadata
@@ -26,8 +26,14 @@ trait Slack {
   // https://api.slack.com/methods/views.publish
   def publishView(request: ViewsPublishRequest): IO[ViewsPublishResponse]
 
+  // https://api.slack.com/methods/chat.postMessage
+  def chatPostMessage(request: ChatPostMessageRequest): IO[ChatPostMessageResponse]
+
   // https://api.slack.com/methods/chat.postEphemeral
-  def chatPostEphemeral(request: ChatPostEphemeralRequest): IO[ChatPostEphemeralResponse]
+  def chatPostEphemeralMessage(request: ChatPostEphemeralRequest): IO[ChatPostEphemeralResponse]
+
+  // https://api.slack.com/methods/chat.delete
+  def chatDeleteMessage(request: ChatDeleteRequest): IO[ChatDeleteResponse]
 }
 
 object Slack {
@@ -75,9 +81,21 @@ object Slack {
         r => SlackApiError.from(r, r.getResponseMetadata),
       )
 
-    override def chatPostEphemeral(request: ChatPostEphemeralRequest): IO[ChatPostEphemeralResponse] =
+    override def chatPostMessage(request: ChatPostMessageRequest): IO[ChatPostMessageResponse] =
+      adaptApiError[ChatPostMessageResponse](
+        IO.fromCompletableFuture(IO(client.chatPostMessage(request))),
+        SlackApiError.from,
+      )
+
+    override def chatPostEphemeralMessage(request: ChatPostEphemeralRequest): IO[ChatPostEphemeralResponse] =
       adaptApiError[ChatPostEphemeralResponse](
         IO.fromCompletableFuture(IO(client.chatPostEphemeral(request))),
+        SlackApiError.from,
+      )
+
+    override def chatDeleteMessage(request: ChatDeleteRequest): IO[ChatDeleteResponse] =
+      adaptApiError[ChatDeleteResponse](
+        IO.fromCompletableFuture(IO(client.chatDelete(request))),
         SlackApiError.from,
       )
 

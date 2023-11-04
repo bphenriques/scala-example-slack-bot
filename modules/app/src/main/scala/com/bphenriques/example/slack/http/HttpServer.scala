@@ -27,7 +27,8 @@ class HttpServer(slackBot: SlackBot, http4sSlackProxy: Http4sSlackProxy[IO])(imp
       http4sSlackProxy
         .http4sToSlackRequest(req)
         .flatMap {
-          case e: SlashCommandRequest => slackBot.handleSlashCommand(e).flatMap(http4sSlackProxy.slackResponseToHttp4)
+          case request: SlashCommandRequest =>
+            slackBot.handleSlashCommand(request).flatMap(http4sSlackProxy.slackResponseToHttp4)
           case other =>
             log.warn(s"Unhandled type of response in the events endpoint ${other.getRequestType.name()}") >> Ok()
         }
@@ -35,10 +36,10 @@ class HttpServer(slackBot: SlackBot, http4sSlackProxy: Http4sSlackProxy[IO])(imp
       http4sSlackProxy
         .http4sToSlackRequest(req)
         .flatMap {
-          case viewSubmission: ViewSubmissionRequest =>
-            slackBot.handleViewSubmission(viewSubmission).flatMap(http4sSlackProxy.slackResponseToHttp4)
-          case blockCenas: BlockActionRequest =>
-            log.info(s"Received block actions ${blockCenas.getRequestBodyAsString}") >> Ok()
+          case request: ViewSubmissionRequest =>
+            slackBot.handleViewSubmission(request).flatMap(http4sSlackProxy.slackResponseToHttp4)
+          case request: BlockActionRequest =>
+            slackBot.handleBlockActions(request).flatMap(http4sSlackProxy.slackResponseToHttp4)
           case other =>
             log.warn(s"Unhandled type of response in the interactivity endpoint ${other.getRequestType.name()}") >> Ok()
         }
