@@ -19,8 +19,9 @@ import scala.jdk.CollectionConverters._
 
 trait Http4sSlackProxy[F[_]] {
   def verifySlackHeaders: HttpMiddleware[F]
-  def http4sToSlackRequest(request: Request[F]): F[SlackRequest[_]]
-  def slackResponseToHttp4(response: SlackResponse): F[Response[F]]
+
+  // Must be answered within 3000 milliseconds: https://api.slack.com/interactivity/slash-commands#responding_basic_receipt
+  def handle(request: Request[F])(handler: SlackRequest[_] => F[SlackResponse]): F[Response[F]]
 }
 
 object Http4sSlackProxy {
@@ -49,7 +50,12 @@ object Http4sSlackProxy {
         }
       }
 
-      override def http4sToSlackRequest(request: Request[F]): F[SlackRequest[_]] =
+      override def handle(request: Request[F])(handler: SlackRequest[_] => F[SlackResponse]): F[Response[F]] =
+        http4sToSlackRequest(request)
+          .flatMap(handler)
+          .flatMap(slackResponse => slackResponseToHttp4(slackResponse))
+
+      def http4sToSlackRequest(request: Request[F]): F[SlackRequest[_]] =
         request.bodyText.compile.string
           .flatMap { requestBody =>
             val headers = request.headers.headers
@@ -71,7 +77,7 @@ object Http4sSlackProxy {
           }
           .flatMap(request => Sync[F].delay(parser.parse(request)))
 
-      override def slackResponseToHttp4(response: SlackResponse): F[Response[F]] = {
+      def slackResponseToHttp4(response: SlackResponse): F[Response[F]] = {
         val status = Status.fromInt(response.getStatusCode.toInt).toOption.get
         val headers = response.getHeaders.asScala.iterator.toList
           .flatMap { case (header, values) => values.asScala.map(header -> _) }
