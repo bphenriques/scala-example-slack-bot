@@ -6,10 +6,12 @@ import com.bphenriques.example.slack.services.SlackBot
 import com.bphenriques.example.slack.slack.Http4sSlackProxy
 import com.comcast.ip4s.IpLiteralSyntax
 import com.slack.api.bolt.request.builtin.{BlockActionRequest, SlashCommandRequest, ViewSubmissionRequest}
-import org.http4s.HttpRoutes
+import com.slack.api.bolt.request.{Request => SlackRequest}
+import com.slack.api.bolt.response.{Response => SlackResponse}
 import org.http4s.dsl.io._
 import org.http4s.ember.server._
 import org.http4s.server.middleware.{ErrorAction, ErrorHandling}
+import org.http4s.{HttpRoutes, Request, Response}
 import org.typelevel.log4cats.StructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jFactory
 
@@ -24,26 +26,27 @@ class HttpServer(slackBot: SlackBot, http4sSlackProxy: Http4sSlackProxy[IO])(imp
   // Must be answered within 3000 milliseconds: https://api.slack.com/interactivity/slash-commands#responding_basic_receipt
   val slackRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] {
     case req @ POST -> Root / "slack" / "events" =>
-      http4sSlackProxy
-        .http4sToSlackRequest(req)
-        .flatMap {
-          case request: SlashCommandRequest =>
-            slackBot.handleSlashCommand(request).flatMap(http4sSlackProxy.slackResponseToHttp4)
-          case other =>
-            log.warn(s"Unhandled type of response in the events endpoint ${other.getRequestType.name()}") >> Ok()
-        }
+      handleSlackEvent(req) {
+        case request: SlashCommandRequest => slackBot.handleSlashCommand(request)
+        case other =>
+          log.warn(s"Unhandled slack event: ${other.getRequestType.name()}") >> SlackResponse.ok().pure[IO]
+      }
     case req @ POST -> Root / "slack" / "interactivity" =>
-      http4sSlackProxy
-        .http4sToSlackRequest(req)
-        .flatMap {
-          case request: ViewSubmissionRequest =>
-            slackBot.handleViewSubmission(request).flatMap(http4sSlackProxy.slackResponseToHttp4)
-          case request: BlockActionRequest =>
-            slackBot.handleBlockActions(request).flatMap(http4sSlackProxy.slackResponseToHttp4)
-          case other =>
-            log.warn(s"Unhandled type of response in the interactivity endpoint ${other.getRequestType.name()}") >> Ok()
-        }
+      handleSlackEvent(req) {
+        case request: ViewSubmissionRequest => slackBot.handleViewSubmission(request)
+        case request: BlockActionRequest    => slackBot.handleBlockActions(request)
+        case other =>
+          log.warn(s"Unhandled slack interactivity: ${other.getRequestType.name()}") >> SlackResponse.ok().pure[IO]
+      }
   }
+
+  private def handleSlackEvent(
+    http4sRequest: Request[IO],
+  )(handler: SlackRequest[_] => IO[SlackResponse]): IO[Response[IO]] =
+    http4sSlackProxy
+      .http4sToSlackRequest(http4sRequest)
+      .flatMap(handler)
+      .flatMap(slackResponse => http4sSlackProxy.slackResponseToHttp4(slackResponse))
 
   def run: IO[Unit] = {
     implicit val loggerFactory: Slf4jFactory[IO] = Slf4jFactory.create[IO]

@@ -57,11 +57,9 @@ object Extractor {
     case class Other(message: String)                   extends ExtractError(message)
   }
 
-  def apply[A](f: SlackState => Either[ExtractError, A]): Extractor[A] = state => f(state)
-
-  def pure[A](v: A): Extractor[A]                     = apply(_ => v.asRight[ExtractError])
+  def pure[A](v: A): Extractor[A]                     = _ => v.asRight[ExtractError]
   def failWithMessage[A](error: String): Extractor[A] = fail(ExtractError.Other(error))
-  def fail[A](error: ExtractError): Extractor[A]      = apply(_ => error.asLeft[Nothing])
+  def fail[A](error: ExtractError): Extractor[A]      = _ => error.asLeft[Nothing]
 
   private def rawGet[A](
     state: SlackState,
@@ -77,13 +75,13 @@ object Extractor {
       case None => ExtractError.InvalidAddress(address).asLeft[A]
     }
 
-  def string(at: SlackState.Address): Extractor[String] = apply(state => rawGet(state, at, _.getValue))
+  def string(at: SlackState.Address): Extractor[String] = state => rawGet(state, at, _.getValue)
 
   def selectedOption(at: SlackState.Address): Extractor[String] =
-    apply(state => rawGet(state, at, _.getSelectedOption.getValue))
+    state => rawGet(state, at, _.getSelectedOption.getValue)
 
   def selectedOptions(at: SlackState.Address): Extractor[List[String]] =
-    apply(state => rawGet(state, at, _.getSelectedOptions.asScala.toList.map(_.getValue)))
+    state => rawGet(state, at, _.getSelectedOptions.asScala.toList.map(_.getValue))
 }
 
 case class SlackState(state: Map[String, Map[String, SlackViewState.Value]])
