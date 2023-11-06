@@ -21,6 +21,7 @@ trait Http4sSlackProxy[F[_]] {
   def verifySlackHeaders: HttpMiddleware[F]
 
   // Must be answered within 3000 milliseconds: https://api.slack.com/interactivity/slash-commands#responding_basic_receipt
+  // It this a Kleisi (A => F[B])?
   def handle(request: Request[F])(handler: SlackRequest[_] => F[SlackResponse]): F[Response[F]]
 }
 
@@ -37,15 +38,15 @@ object Http4sSlackProxy {
       override def verifySlackHeaders: HttpMiddleware[F] = { (routes: HttpRoutes[F]) =>
         Kleisli { (request: Request[F]) =>
           OptionT
-            .liftF {
+            .liftF(
               (
                 timestampGen.map(_.toEpochMilli),
                 Sync[F].fromEither(SlackHeader(request.headers)),
                 request.bodyText.compile.string,
               ).mapN { case (nowMilli, SlackHeader(requestTsStr, signature), body) =>
                 verifier.isValid(requestTsStr, body, signature, nowMilli)
-              }
-            }
+              },
+            )
             .ifM(routes(request), OptionT.pure(Response[F](Status.Unauthorized)))
         }
       }
@@ -64,28 +65,27 @@ object Http4sSlackProxy {
               .map { case (k, values) => k -> values.asJava }
               .asJava
 
-            Sync[F].delay(
-              SlackRequestParser.HttpRequest
+            Sync[F].delay {
+              val base = SlackRequestParser.HttpRequest
                 .builder()
                 .requestUri(request.uri.renderString)
-                // .queryString(req.queryString)
+                .queryString(request.uri.query.multiParams.map { case (k, v) => k -> v.asJava }.asJava)
                 .headers(new RequestHeaders(headers))
                 .requestBody(requestBody)
-                // .remoteAddress(request.remoteAddr)
-                .build(),
-            )
+              request.remoteAddr.foreach(addr => base.remoteAddress(addr.toUriString))
+              base.build()
+            }
           }
           .flatMap(request => Sync[F].delay(parser.parse(request)))
 
       def slackResponseToHttp4(response: SlackResponse): F[Response[F]] = {
         val status = Status.fromInt(response.getStatusCode.toInt).toOption.get
+
+        // The headers are not set in the Java API despite the field Content Type being set...
         val headers = response.getHeaders.asScala.iterator.toList
           .flatMap { case (header, values) => values.asScala.map(header -> _) }
           .map { case (key, value) => Headers(Header.Raw(CIString(key), value)) }
-          .combineAll ++
-          Headers(
-            Header.Raw(CIString("Content-Type"), response.getContentType),
-          ) // The headers are not set in the Java API despite the field Content Type being...
+          .combineAll ++ Headers(Header.Raw(CIString("Content-Type"), response.getContentType))
 
         val entity = Option(response.getBody) match {
           case Some(body) => Entity.utf8String(body)
