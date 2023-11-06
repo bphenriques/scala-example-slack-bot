@@ -22,20 +22,14 @@ class HttpServer(slackBot: SlackBot, http4sSlackProxy: Http4sSlackProxy[IO])(imp
 
   val healthRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] { case GET -> Root / "health" => Ok() }
 
-  val slackRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] {
-    case req @ POST -> Root / "slack" / "events" =>
-      http4sSlackProxy.handle(req) {
-        case request: SlashCommandRequest => slackBot.handleSlashCommand(request)
-        case other =>
-          log.warn(s"Unhandled slack event: ${other.getRequestType.name()}") >> SlackResponse.ok().pure[IO]
-      }
-    case req @ POST -> Root / "slack" / "interactivity" =>
-      http4sSlackProxy.handle(req) {
-        case request: ViewSubmissionRequest => slackBot.handleViewSubmission(request)
-        case request: BlockActionRequest    => slackBot.handleBlockActions(request)
-        case other =>
-          log.warn(s"Unhandled slack interactivity: ${other.getRequestType.name()}") >> SlackResponse.ok().pure[IO]
-      }
+  val slackRoutes: HttpRoutes[IO] = HttpRoutes.of[IO] { case req @ POST -> Root / "slack" / "events" =>
+    http4sSlackProxy.handle(req) {
+      case request: SlashCommandRequest   => slackBot.handleSlashCommand(request)
+      case request: ViewSubmissionRequest => slackBot.handleViewSubmission(request)
+      case request: BlockActionRequest    => slackBot.handleBlockActions(request)
+      case other =>
+        log.warn(s"Unhandled slack event: ${other.getRequestType.name()}") >> SlackResponse.ok().pure[IO]
+    }
   }
 
   def run: IO[Unit] = {
