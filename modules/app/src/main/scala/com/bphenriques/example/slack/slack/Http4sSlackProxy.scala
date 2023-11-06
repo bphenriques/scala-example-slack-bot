@@ -59,13 +59,13 @@ object Http4sSlackProxy {
       def http4sToSlackRequest(request: Request[F]): F[SlackRequest[_]] =
         request.bodyText.compile.string
           .flatMap { requestBody =>
-            val headers = request.headers.headers
-              .map(h => h.name.toString -> h.value)
-              .groupMap { case (name, _) => name } { case (_, value) => value }
-              .map { case (k, values) => k -> values.asJava }
-              .asJava
-
             Sync[F].delay {
+              val headers = request.headers.headers
+                .map(h => h.name.toString -> h.value)
+                .groupMap { case (name, _) => name } { case (_, value) => value }
+                .map { case (k, values) => k -> values.asJava }
+                .asJava
+
               val base = SlackRequestParser.HttpRequest
                 .builder()
                 .requestUri(request.uri.renderString)
@@ -117,6 +117,6 @@ object model {
   sealed abstract class SlackMiddleWareError(message: String) extends Exception(message)
 
   object SlackMiddleWareError {
-    case object InvalidHeaders extends SlackMiddleWareError(s"The Slack headers are missing or syntactically incorrect")
+    case object InvalidHeaders extends SlackMiddleWareError(s"Slack headers are missing or are syntactically incorrect")
   }
 }
